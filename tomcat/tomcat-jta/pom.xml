@@ -140,13 +140,19 @@
             <version>${version.org.jboss.byteman}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java</artifactId>
+            <version>${version.com.github.docker-java}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
             <plugin>
-              <inherited>false</inherited>
-              <groupId>org.sonatype.plugins</groupId>
-              <artifactId>nexus-staging-maven-plugin</artifactId>
+                <inherited>false</inherited>
+                <groupId>org.sonatype.plugins</groupId>
+                <artifactId>nexus-staging-maven-plugin</artifactId>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -200,7 +206,7 @@
             <dependencies>
                 <dependency>
                     <groupId>org.jboss.arquillian.container</groupId>
-                    <artifactId>arquillian-tomcat-managed-7</artifactId>
+                    <artifactId>arquillian-tomcat-managed-8</artifactId>
                     <version>${version.org.jboss.arquillian.container.tomcat}</version>
                     <scope>test</scope>
                 </dependency>
@@ -219,10 +225,46 @@
                                     <skip>false</skip>
                                     <redirectTestOutputToFile>true</redirectTestOutputToFile>
                                     <systemPropertyVariables combine.children="append">
+                                        <project.build.directory>${project.build.directory}</project.build.directory>
                                         <version.org.jboss.narayana>${project.version}</version.org.jboss.narayana>
                                         <version.org.jboss.resteasy>${version.org.jboss.resteasy}</version.org.jboss.resteasy>
-                                        <version.com.h2database>${version.com.h2database}</version.com.h2database>
                                         <server.jvm.args>${server.jvm.args}</server.jvm.args>
+                                        <!--
+                                        h2:
+                                          By default, the integration test runs with "h2" database, platform independent and in-memory.
+                                        container:
+                                          It requires a running Docker daemon the user executing this TS has the rights to control
+                                          A database is started as a Docker container and it is discarded at the end of testing.
+                                          See dockerHost in http://dmp.fabric8.io/docker-maven-plugin.pdf for details.
+                                        dballocator:
+                                          It requires an instance of DBAllocator running in your infrastructure. It enables the TS to
+                                          lease various databases, including but not limited to Sybase, DB2, MS SQL, Maria, Postgress, Oracle...
+                                        -->
+                                        <h2.or.container.or.dballocator>h2</h2.or.container.or.dballocator>
+                                        <!-- h2 properties -->
+                                        <version.com.h2database>${version.com.h2database}</version.com.h2database>
+                                        <!-- container properties -->
+                                        <container.database.image>postgres:9.4</container.database.image>
+                                        <container.database.driver.artifact>org.postgresql:postgresql:42.2.1</container.database.driver.artifact>
+                                        <container.database.driver.class>org.postgresql.Driver</container.database.driver.class>
+                                        <container.database.datasource.class.xa>org.postgresql.xa.PGXADataSource</container.database.datasource.class.xa>
+                                        <container.docker.daemon.api.url>tcp://127.0.0.1:2375</container.docker.daemon.api.url>
+                                        <container.name>narayana_db</container.name>
+                                        <container.database.username>narayana_user</container.database.username>
+                                        <container.database.password>narayana_pass</container.database.password>
+                                        <container.database.name>narayana_db</container.database.name>
+                                        <container.database.bind.host.ip>127.0.0.1</container.database.bind.host.ip>
+                                        <container.database.bind.host.port>5432</container.database.bind.host.port>
+                                        <!-- The undermentioned timeout accounts both for pulling image and starting container. Might be split into two timeouts in future. -->
+                                        <container.timeout.waiting.for.tcp>120000</container.timeout.waiting.for.tcp>
+                                        <!-- dballocator properties -->
+                                        <dballocator.host.port>http://your.db.allocator.example.com:8080</dballocator.host.port>
+                                        <dballocator.expression>postgresql94</dballocator.expression>
+                                        <dballocator.requestee>narayana-tomcat-ts</dballocator.requestee>
+                                        <dballocator.expiry.minutes>10</dballocator.expiry.minutes>
+                                        <dballocator.timeout.minutes>20</dballocator.timeout.minutes>
+                                        <dballocator.driver.url>http://your.fileserver.example.com/postgresql-42.1.1.jar</dballocator.driver.url>
+                                        <dballocator.driver.url.timeout.seconds>120</dballocator.driver.url.timeout.seconds>
                                     </systemPropertyVariables>
                                 </configuration>
                             </execution>
@@ -265,22 +307,22 @@
             </properties>
         </profile>
         <profile>
-          <id>release</id>
-          <build>
-            <plugins>
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-install-plugin</artifactId>
-              <executions>
-                <execution>
-                  <id>default-install</id>
-                  <phase>install</phase>
-                </execution>
-              </executions>
-              <inherited>false</inherited>
-            </plugin>
-          </plugins>
-        </build>
-      </profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-install-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default-install</id>
+                                <phase>install</phase>
+                            </execution>
+                        </executions>
+                        <inherited>false</inherited>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
