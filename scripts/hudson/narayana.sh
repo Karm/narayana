@@ -563,18 +563,21 @@ function tx_bridge_tests {
 function tomcat_tests {
     echo "Initializing Narayana Tomcat tests"
     cd ${WORKSPACE}
-    TOMCAT_NAME=apache-tomcat-7.0.70
-    curl -LOk http://archive.apache.org/dist/tomcat/tomcat-7/v7.0.70/bin/${TOMCAT_NAME}.zip
+    TOMCAT_NAME=apache-tomcat-9.0.5
+    curl -LOk https://archive.apache.org/dist/tomcat/tomcat-9/v9.0.5/bin/${TOMCAT_NAME}.zip
     unzip ${TOMCAT_NAME}.zip
     rm ${TOMCAT_NAME}.zip
     export CATALINA_HOME=$PWD/${TOMCAT_NAME}
     chmod u+x ${CATALINA_HOME}/bin/*.sh
-    cat << 'EOF' > ${CATALINA_HOME}/conf/tomcat-users.xml
-<?xml version='1.0' encoding='utf-8'?>
-<tomcat-users>
-    <user username="test" password="test" roles="manager-script"/>
-</tomcat-users>
-EOF
+    sed -i 's/<\/tomcat-users>/<user username="arquillian" password="arquillian" roles="manager-script"\/>\n<\/tomcat-users>/' ${CATALINA_HOME}/conf/tomcat-users.xml
+    cat <<EOT >> ${CATALINA_HOME}/conf/logging.properties
+org.apache.tomcat.tomcat-jdbc.level = ALL
+org.h2.level = ALL
+org.postgresql.level = ALL
+javax.sql.level = ALL
+org.apache.tomcat.tomcat-dbcp.level = ALL
+com.arjuna.level = ALL
+EOT
     echo "Executing Narayana Tomcat tests"
     ./build.sh -f tomcat/tomcat-jta/pom.xml -B -P${ARQ_PROF}-tomcat ${CODE_COVERAGE_ARGS} "$@" ${IPV6_OPTS} install "$@"
     RESULT=$?
