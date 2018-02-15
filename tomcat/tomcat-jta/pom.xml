@@ -229,13 +229,14 @@
                                         <version.org.jboss.narayana>${project.version}</version.org.jboss.narayana>
                                         <version.org.jboss.resteasy>${version.org.jboss.resteasy}</version.org.jboss.resteasy>
                                         <server.jvm.args>${server.jvm.args}</server.jvm.args>
+                                        <tomcat.user>arquillian</tomcat.user>
+                                        <tomcat.pass>arquillian</tomcat.pass>
                                         <!--
                                         h2:
                                           By default, the integration test runs with "h2" database, platform independent and in-memory.
                                         container:
                                           It requires a running Docker daemon the user executing this TS has the rights to control
                                           A database is started as a Docker container and it is discarded at the end of testing.
-                                          See dockerHost in http://dmp.fabric8.io/docker-maven-plugin.pdf for details.
                                         dballocator:
                                           It requires an instance of DBAllocator running in your infrastructure. It enables the TS to
                                           lease various databases, including but not limited to Sybase, DB2, MS SQL, Maria, Postgress, Oracle...
