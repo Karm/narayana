@@ -232,7 +232,7 @@ public class PostgresContainerAllocator extends Allocator {
                     // TODO - replace with a logical check - an SQL statement.
                     // Sometimes it takes a jiffy to avoid "PSQLException: the database system is starting up"
                     try {
-                        Thread.sleep(5000);
+                        Thread.sleep(10000);
                     } catch (InterruptedException e) {
                         LOGGER.severe(e.getMessage());
                     }
@@ -278,7 +278,7 @@ public class PostgresContainerAllocator extends Allocator {
                 .dsLoginTimeout("0")
                 .dsFactory(containerDatabaseDatasourceClassXa + "Factory")
                 .dsDriverClassName(containerDatabaseDriverClass)
-                .tdsType("javax.sql.DataSource")
+                .tdsType("javax.sql.XADataSource")
                 .tdsUrl("jdbc:arjuna:java:comp/env")
                 .tdsDriverClassName("com.arjuna.ats.jdbc.TransactionalDriver")
                 .dbDriverArtifact(containerDatabaseDriverArtifact)

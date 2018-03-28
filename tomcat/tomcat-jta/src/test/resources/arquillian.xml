@@ -26,6 +26,9 @@
         http://jboss.org/schema/arquillian/arquillian_1_0.xsd">
 
     <defaultProtocol type="Servlet 3.0"/>
+    <engine>
+        <property name="deploymentExportPath">target</property>
+    </engine>
     <container qualifier="tomcat" default="true">
         <configuration>
             <property name="unpackArchive">true</property>

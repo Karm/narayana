@@ -257,7 +257,7 @@
                                         <container.database.bind.host.ip>127.0.0.1</container.database.bind.host.ip>
                                         <container.database.bind.host.port>5432</container.database.bind.host.port>
                                         <!-- The undermentioned timeout accounts both for pulling image and starting container. Might be split into two timeouts in future. -->
-                                        <container.timeout.waiting.for.tcp>120000</container.timeout.waiting.for.tcp>
+                                        <container.timeout.waiting.for.tcp>240000</container.timeout.waiting.for.tcp>
                                         <!-- dballocator properties -->
                                         <dballocator.host.port>http://your.db.allocator.example.com:8080</dballocator.host.port>
                                         <dballocator.expression>postgresql94</dballocator.expression>

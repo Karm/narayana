@@ -105,7 +105,6 @@ public abstract class AbstractCase {
             dbSource.setAttribute("username", db.dsUsername);
             dbSource.setAttribute("user", db.dsUser);
             dbSource.setAttribute("password", db.dsPassword);
-            dbSource.setAttribute("driverClassName", db.dsDriverClassName);
             dbSource.setAttribute("url", db.dsUrl);
             dbSource.setAttribute("description", "Data Source");
             dbSource.setAttribute("loginTimeout", db.dsLoginTimeout);
@@ -127,6 +126,27 @@ public abstract class AbstractCase {
             tsDbSource.setAttribute("driverClassName", db.tdsDriverClassName);
             tsDbSource.setAttribute("url", db.tdsUrl + "/myDataSource");
             tsDbSource.setAttribute("description", "Transactional Driver Data Source");
+            // Connection pool settings
+            tsDbSource.setAttribute("factory", "org.apache.tomcat.jdbc.pool.DataSourceFactory");
+            // We don'r want Arjuna to do the pooling, we want Tomcat JDBC to do the deed.
+            tsDbSource.setAttribute("connectionProperties", "POOL_CONNECTIONS=false");
+            tsDbSource.setAttribute("testWhileIdle", "true");
+            tsDbSource.setAttribute("testOnBorrow", "true");
+            tsDbSource.setAttribute("testOnReturn", "true");
+            tsDbSource.setAttribute("validationQuery", "SELECT 1");
+            tsDbSource.setAttribute("validationInterval", "10000");
+            tsDbSource.setAttribute("timeBetweenEvictionRunsMillis", "20000");
+            tsDbSource.setAttribute("maxActive", "100");
+            tsDbSource.setAttribute("minIdle", "10");
+            tsDbSource.setAttribute("maxWait", "10000");
+            tsDbSource.setAttribute("initialSize", "10");
+            tsDbSource.setAttribute("removeAbandonedTimeout", "60");
+            tsDbSource.setAttribute("removeAbandoned", "true");
+            tsDbSource.setAttribute("logAbandoned", "true");
+            tsDbSource.setAttribute("minEvictableIdleTimeMillis", "30000");
+            tsDbSource.setAttribute("jmxEnabled", "true");
+            tsDbSource.setAttribute("defaultAutoCommit", "false");
+            tsDbSource.setAttribute("jdbcInterceptors", "org.apache.tomcat.jdbc.pool.interceptor.ConnectionState;org.apache.tomcat.jdbc.pool.interceptor.StatementFinalizer");
             context.getDocumentElement().appendChild(tsDbSource);
 
             final Transformer transformer = TransformerFactory.newInstance().newTransformer();
