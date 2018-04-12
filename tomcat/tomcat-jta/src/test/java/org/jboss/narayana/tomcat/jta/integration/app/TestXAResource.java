@@ -40,7 +40,7 @@ public class TestXAResource implements XAResource {
 
     private static final Logger LOGGER = Logger.getLogger(TestXAResource.class.getSimpleName());
 
-    public static final String LOG_DIR = System.getProperty("java.io.tmpdir");
+    public static final String LOG_DIR = System.getProperty("java.io.tmpdir")+File.pathSeparator+"TX-tmp";
 
     private Xid xid;
 
