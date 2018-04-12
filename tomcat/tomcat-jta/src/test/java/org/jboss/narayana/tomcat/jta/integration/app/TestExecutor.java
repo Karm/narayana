@@ -22,32 +22,28 @@
 
 package org.jboss.narayana.tomcat.jta.integration.app;
 
-import com.arjuna.ats.arjuna.recovery.RecoveryManager;
 import com.arjuna.ats.internal.jta.recovery.arjunacore.XARecoveryModule;
+import com.arjuna.ats.jta.recovery.XAResourceRecoveryHelper;
 
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
-import javax.transaction.HeuristicMixedException;
-import javax.transaction.HeuristicRollbackException;
-import javax.transaction.NotSupportedException;
-import javax.transaction.RollbackException;
-import javax.transaction.SystemException;
 import javax.transaction.TransactionManager;
 import javax.transaction.TransactionSynchronizationRegistry;
 import javax.transaction.UserTransaction;
+import javax.transaction.xa.XAResource;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.time.LocalTime;
-import java.util.Arrays;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.logging.Logger;
+
+import static java.lang.Thread.sleep;
 
 /**
  * @author <a href="mailto:gytis@redhat.com">Gytis Trikleris</a>
@@ -59,9 +55,115 @@ public class TestExecutor {
 
     public static final String JNDI_TEST = "jndi";
 
-    public static final String RECOVERY_TEST = "recovery";
+    public static final String RECOVERY_T = "recovery";
+
+    public static final String CRASH_T = "crash";
 
     private static final Logger LOGGER = Logger.getLogger(TestExecutor.class.getSimpleName());
+
+    private final StringDao stringDao;
+
+    private final TransactionManager transactionManager;
+
+    public TestExecutor() throws NamingException, SQLException {
+        stringDao = new StringDao();
+        transactionManager = getTransactionManager();
+    }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<String> getStrings() throws SQLException {
+        LOGGER.info(" GET");
+        return stringDao.getAll();
+    }
+
+    @POST
+    public void saveString(String string) throws Exception {
+        LOGGER.info(" POST");
+        LOGGER.info(" begin transaction");
+        transactionManager.begin();
+        LOGGER.info(" save string");
+        try {
+            stringDao.save(string);
+            LOGGER.info(" commit transaction");
+            transactionManager.commit();
+            LOGGER.info(" transaction committed successfully");
+        } catch (SQLException e) {
+            LOGGER.info(" rollback transaction");
+            transactionManager.rollback();
+            LOGGER.info(" transaction rolled back");
+            throw e;
+        } finally {
+            stringDao.close();
+        }
+    }
+
+    @DELETE
+    public void removeAll() throws Exception {
+        LOGGER.info(" DELETE");
+        stringDao.removeAll();
+    }
+
+    @POST
+    @Path(CRASH_T)
+    public void crash(String string) throws Exception {
+        transactionManager.begin();
+        try {
+            transactionManager.getTransaction().enlistResource(new TestXAResource());
+            stringDao.save(string);
+            transactionManager.commit();
+        } catch (SQLException e) {
+            transactionManager.rollback();
+            throw e;
+        } finally {
+            stringDao.close();
+        }
+    }
+
+    @GET
+    @Path(RECOVERY_T)
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<String> recovery() throws Exception {
+        List<String> stringsBefore = stringDao.getAll();
+        LOGGER.info("Strings at the start: " + stringsBefore);
+        getXARecoveryModule().addXAResourceRecoveryHelper(new XAResourceRecoveryHelper() {
+            @Override
+            public boolean initialise(String s) throws Exception {
+                return true;
+            }
+
+            @Override
+            public XAResource[] getXAResources() throws Exception {
+                return new TestXAResourceRecovery().getXAResources();
+            }
+        });
+        waitForRecovery(stringsBefore);
+        LOGGER.info("Strings at the end: " + stringDao.getAll());
+        return stringDao.getAll();
+    }
+
+    private void waitForRecovery(List<String> stringsBefore) throws Exception {
+        boolean isComplete = false;
+
+        for (int i = 0; i < 3 && !isComplete; i++) {
+            sleep(5000);
+            isComplete = stringsBefore.size() < stringDao.getAll().size();
+        }
+
+        if (isComplete) {
+            LOGGER.info("Recovery completed successfully");
+        } else {
+            throw new Exception("Something wrong happened and recovery didn't complete");
+        }
+    }
+
+    private XARecoveryModule getXARecoveryModule() {
+        XARecoveryModule xaRecoveryModule = XARecoveryModule.getRegisteredXARecoveryModule();
+        if (xaRecoveryModule != null) {
+            return xaRecoveryModule;
+        }
+        throw new IllegalStateException("XARecoveryModule is not registered with recovery manager");
+    }
 
     @GET
     @Path(JNDI_TEST)
@@ -87,80 +189,6 @@ public class TestExecutor {
         return Response.noContent().build();
     }
 
-    @GET
-    @Path(RECOVERY_TEST)
-    public Response verifyRecovery() throws NamingException, HeuristicRollbackException, RollbackException,
-            HeuristicMixedException, SystemException, NotSupportedException, SQLException {
-        LOGGER.info("Verifying recovery");
-
-        TestXAResource.reset();
-        createTestTable();
-        String testEntry = "test-entry-" + LocalTime.now();
-        TestXAResource testXAResource = new TestXAResource();
-
-        updateXARecoveryModule(m -> m.addXAResourceRecoveryHelper(testXAResource));
-
-        try {
-            getTransactionManager().begin();
-            getTransactionManager().getTransaction().enlistResource(testXAResource);
-            writeToTheDatabase(testEntry);
-            try {
-                getTransactionManager().commit();
-                return Response.serverError().entity("Commit failure was expected").build();
-            } catch (Throwable ignored) {
-                RecoveryManager.manager().scan();
-                RecoveryManager.manager().scan();
-            }
-
-            return getRecoveryTestResponse(testEntry);
-        } finally {
-            updateXARecoveryModule(m -> m.removeXAResourceRecoveryHelper(testXAResource));
-        }
-    }
-
-    private void updateXARecoveryModule(Consumer<XARecoveryModule> action) {
-        RecoveryManager.manager().getModules().stream().filter(m -> m instanceof XARecoveryModule)
-                .forEach(m -> action.accept((XARecoveryModule) m));
-    }
-
-    private Response getRecoveryTestResponse(String testEntry) throws SQLException, NamingException {
-        if (didRecoveryHappen(testEntry)) {
-            return Response.noContent().build();
-        }
-
-        return Response.serverError().entity("Recovery failed").build();
-    }
-
-    private boolean didRecoveryHappen(String entry) throws SQLException, NamingException {
-        List<String> expectedMethods = Arrays.asList("start", "end", "prepare", "commit");
-        List<String> actualMethods = TestXAResource.getMethodCalls();
-        LOGGER.info("Verifying TestXAResource methods. Expected=" + expectedMethods + ", actual=" + actualMethods);
-
-        boolean entryExists = doesEntryExist(entry);
-        LOGGER.info("Verifying if database entry exists:" + entryExists);
-
-        return expectedMethods.equals(actualMethods) && entryExists;
-    }
-
-    private boolean doesEntryExist(String entry) throws SQLException, NamingException {
-        String query = "SELECT COUNT(*) FROM test WHERE value='" + entry + "'";
-        try (Connection connection = getTransactionalDataSource().getConnection();
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery(query)) {
-            return result.next() && result.getInt(1) > 0;
-        } catch (SQLException e) {
-            return false;
-        }
-    }
-
-    private void writeToTheDatabase(String entry) throws NamingException, SQLException {
-        String query = "INSERT INTO test VALUES ('" + entry + "')";
-        try (Connection connection = getTransactionalDataSource().getConnection();
-             Statement statement = connection.createStatement()) {
-            statement.execute(query);
-        }
-    }
-
     private UserTransaction getUserTransaction() throws NamingException {
         return InitialContext.doLookup("java:comp/UserTransaction");
     }
@@ -176,13 +204,4 @@ public class TestExecutor {
     private DataSource getTransactionalDataSource() throws NamingException {
         return InitialContext.doLookup("java:comp/env/transactionalDataSource");
     }
-
-    private void createTestTable() throws SQLException, NamingException {
-        String query = "CREATE TABLE IF NOT EXISTS test (value VARCHAR(100))";
-        try (Connection connection = getTransactionalDataSource().getConnection();
-             Statement statement = connection.createStatement()) {
-            statement.execute(query);
-        }
-    }
-
 }

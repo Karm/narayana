@@ -129,7 +129,6 @@ public abstract class AbstractCase {
             // Connection pool settings
             tsDbSource.setAttribute("factory", "org.apache.tomcat.jdbc.pool.DataSourceFactory");
             // We don'r want Arjuna to do the pooling, we want Tomcat JDBC to do the deed.
-            tsDbSource.setAttribute("connectionProperties", "POOL_CONNECTIONS=false");
             tsDbSource.setAttribute("testWhileIdle", "true");
             tsDbSource.setAttribute("testOnBorrow", "true");
             tsDbSource.setAttribute("testOnReturn", "true");
@@ -146,7 +145,6 @@ public abstract class AbstractCase {
             tsDbSource.setAttribute("minEvictableIdleTimeMillis", "30000");
             tsDbSource.setAttribute("jmxEnabled", "true");
             tsDbSource.setAttribute("defaultAutoCommit", "false");
-            tsDbSource.setAttribute("jdbcInterceptors", "org.apache.tomcat.jdbc.pool.interceptor.ConnectionState;org.apache.tomcat.jdbc.pool.interceptor.StatementFinalizer");
             context.getDocumentElement().appendChild(tsDbSource);
 
             final Transformer transformer = TransformerFactory.newInstance().newTransformer();

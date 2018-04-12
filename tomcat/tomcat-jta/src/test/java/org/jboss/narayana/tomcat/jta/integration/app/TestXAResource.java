@@ -1,119 +1,196 @@
 /*
- * JBoss, Home of Professional Open Source.
- * Copyright 2016, Red Hat, Inc., and individual contributors
- * as indicated by the @author tags. See the copyright.txt file in the
+ * JBoss, Home of Professional Open Source
+ * Copyright 2016, Red Hat, Inc. and/or its affiliates, and individual
+ * contributors by the @authors tag. See the copyright.txt in the
  * distribution for a full listing of individual contributors.
  *
- * This is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as
- * published by the Free Software Foundation; either version 2.1 of
- * the License, or (at your option) any later version.
- *
- * This software is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this software; if not, write to the Free
- * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 package org.jboss.narayana.tomcat.jta.integration.app;
 
-import com.arjuna.ats.jta.recovery.XAResourceRecoveryHelper;
+import com.arjuna.ats.arjuna.common.Uid;
 
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.logging.Logger;
 
 /**
+ * This class is used solely for simulating system crash.
+ *
  * @author <a href="mailto:gytis@redhat.com">Gytis Trikleris</a>
+ * @author <a href="mailto:zfeng@redhat.com">Amos Feng</a>
  */
-public class TestXAResource implements XAResource, XAResourceRecoveryHelper {
+public class TestXAResource implements XAResource {
 
-    private static final List<String> METHOD_CALLS = new LinkedList<>();
+    private static final Logger LOGGER = Logger.getLogger(TestXAResource.class.getSimpleName());
+
+    public static final String LOG_DIR = System.getProperty("java.io.tmpdir");
 
     private Xid xid;
 
-    public static List<String> getMethodCalls() {
-        return Collections.unmodifiableList(METHOD_CALLS);
+    private File file;
+
+    public TestXAResource() {
     }
 
-    public static void reset() {
-        METHOD_CALLS.clear();
+    /**
+     * Constructor used by recovery manager to recreate XAResource
+     *
+     * @param file File where Xid of the XAResource is stored
+     */
+    public TestXAResource(File file) throws IOException {
+        this.file = file;
+        this.xid = getXidFromFile(file);
     }
 
-    @Override
-    public void start(Xid xid, int i) throws XAException {
-        METHOD_CALLS.add("start");
-        this.xid = xid;
+    public int prepare(final Xid xid) throws XAException {
+        LOGGER.info("Preparing " + TestXAResource.class.getSimpleName());
+
+        this.file = writeXidToFile(xid, LOG_DIR);
+
+        return XA_OK;
     }
 
-    @Override
-    public void commit(Xid xid, boolean b) throws XAException {
-        METHOD_CALLS.add("commit");
+    public void commit(final Xid xid, final boolean arg1) throws XAException {
+        LOGGER.info("Committing " + TestXAResource.class.getSimpleName());
+        removeFile(file);
+        this.file = null;
         this.xid = null;
     }
 
-    @Override
-    public void rollback(Xid xid) throws XAException {
-        METHOD_CALLS.add("rollback");
+    public void rollback(final Xid xid) throws XAException {
+        LOGGER.info("Rolling back " + TestXAResource.class.getSimpleName());
+
+        removeFile(file);
+        this.file = null;
         this.xid = null;
     }
 
-    @Override
-    public void end(Xid xid, int i) throws XAException {
-        METHOD_CALLS.add("end");
+    public boolean isSameRM(XAResource xaResource) throws XAException {
+        if (!(xaResource instanceof TestXAResource)) {
+            return false;
+        }
+
+        TestXAResource other = (TestXAResource) xaResource;
+
+        return xid != null && other.xid != null && xid.getFormatId() == other.xid.getFormatId()
+                && Arrays.equals(xid.getGlobalTransactionId(), other.xid.getGlobalTransactionId())
+                && Arrays.equals(xid.getBranchQualifier(), other.xid.getBranchQualifier());
     }
 
-    @Override
+    public Xid[] recover(int flag) throws XAException {
+        return new Xid[]{xid};
+    }
+
+    public void start(Xid xid, int flags) throws XAException {
+
+    }
+
+    public void end(Xid xid, int flags) throws XAException {
+
+    }
+
     public void forget(Xid xid) throws XAException {
-        METHOD_CALLS.add("forget");
-        this.xid = null;
+
     }
 
-    @Override
     public int getTransactionTimeout() throws XAException {
         return 0;
     }
 
-    @Override
-    public boolean isSameRM(XAResource xaResource) throws XAException {
-        return xaResource instanceof TestXAResource;
+    public boolean setTransactionTimeout(final int seconds) throws XAException {
+        return true;
     }
 
-    @Override
-    public int prepare(Xid xid) throws XAException {
-        METHOD_CALLS.add("prepare");
-        return 0;
+    private Xid getXidFromFile(File file) throws IOException {
+        try (DataInputStream inputStream = new DataInputStream(new FileInputStream(file))) {
+            int formatId = inputStream.readInt();
+            int globalTransactionIdLength = inputStream.readInt();
+            byte[] globalTransactionId = new byte[globalTransactionIdLength];
+            inputStream.read(globalTransactionId, 0, globalTransactionIdLength);
+            int branchQualifierLength = inputStream.readInt();
+            byte[] branchQualifier = new byte[branchQualifierLength];
+            inputStream.read(branchQualifier, 0, branchQualifierLength);
+
+            return new XidImpl(formatId, globalTransactionId, branchQualifier);
+        }
     }
 
-    @Override
-    public Xid[] recover(int i) throws XAException {
-        if (xid == null) {
-            return new Xid[0];
+    private File writeXidToFile(Xid xid, String directory) throws XAException {
+        File dir = new File(directory);
+
+        if (!dir.mkdirs()) {
+            throw new XAException(XAException.XAER_RMERR);
         }
 
-        return new Xid[]{xid};
+        File file = new File(dir, new Uid().fileStringForm() + "_");
+
+        try (DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(file))) {
+            outputStream.writeInt(xid.getFormatId());
+            outputStream.writeInt(xid.getGlobalTransactionId().length);
+            outputStream.write(xid.getGlobalTransactionId(), 0, xid.getGlobalTransactionId().length);
+            outputStream.writeInt(xid.getBranchQualifier().length);
+            outputStream.write(xid.getBranchQualifier(), 0, xid.getBranchQualifier().length);
+            outputStream.flush();
+        } catch (IOException e) {
+            throw new XAException(XAException.XAER_RMERR);
+        }
+
+        return file;
     }
 
-    @Override
-    public boolean setTransactionTimeout(int i) throws XAException {
-        return true;
+    private void removeFile(File file) throws XAException {
+        if (file != null) {
+            if (!file.delete()) {
+                throw new XAException(XAException.XA_RETRY);
+            }
+        }
     }
 
-    @Override
-    public boolean initialise(String p) throws Exception {
-        return true;
-    }
+    private class XidImpl implements Xid {
 
-    @Override
-    public XAResource[] getXAResources() {
-        return new XAResource[]{this};
+        private final int formatId;
+
+        private final byte[] globalTransactionId;
+
+        private final byte[] branchQualifier;
+
+        public XidImpl(int formatId, byte[] globalTransactionId, byte[] branchQualifier) {
+            this.formatId = formatId;
+            this.globalTransactionId = globalTransactionId;
+            this.branchQualifier = branchQualifier;
+        }
+
+        @Override
+        public int getFormatId() {
+            return formatId;
+        }
+
+        @Override
+        public byte[] getGlobalTransactionId() {
+            return globalTransactionId;
+        }
+
+        @Override
+        public byte[] getBranchQualifier() {
+            return branchQualifier;
+        }
+
     }
 }

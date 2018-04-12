@@ -28,9 +28,11 @@ import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
+import org.jboss.narayana.tomcat.jta.integration.app.StringDao;
 import org.jboss.narayana.tomcat.jta.integration.app.TestApplication;
 import org.jboss.narayana.tomcat.jta.integration.app.TestExecutor;
 import org.jboss.narayana.tomcat.jta.integration.app.TestXAResource;
+import org.jboss.narayana.tomcat.jta.integration.app.TestXAResourceRecovery;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -47,9 +49,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.logging.Logger;
 
+import static java.lang.Thread.sleep;
 import static org.jboss.narayana.tomcat.jta.integration.app.TestExecutor.BASE_PATH;
+import static org.jboss.narayana.tomcat.jta.integration.app.TestExecutor.CRASH_T;
 import static org.jboss.narayana.tomcat.jta.integration.app.TestExecutor.JNDI_TEST;
-import static org.jboss.narayana.tomcat.jta.integration.app.TestExecutor.RECOVERY_TEST;
+import static org.jboss.narayana.tomcat.jta.integration.app.TestExecutor.RECOVERY_T;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -90,7 +94,7 @@ public class BaseITCase extends AbstractCase {
     public static WebArchive getDeployment() {
         final File[] libraries = Maven.resolver().resolve(NARAYANA_DEPENDENCY, RESTEASY_DEPENDENCY).withTransitivity().asFile();
         final WebArchive archive = ShrinkWrap.create(WebArchive.class, DEPLOYMENT_NAME + ".war")
-                .addClasses(TestApplication.class, TestExecutor.class, TestXAResource.class)
+                .addClasses(TestApplication.class, TestExecutor.class, TestXAResource.class, TestXAResourceRecovery.class, StringDao.class)
                 .addAsLibraries(libraries)
                 .addAsResource("jbossts-properties.xml", "jbossts-properties.xml")
                 .addAsWebInfResource("web.xml", "web.xml")
@@ -131,8 +135,15 @@ public class BaseITCase extends AbstractCase {
     }
 
     @Test
-    public void testRecovery() {
-        test(EXECUTOR_URL + RECOVERY_TEST);
+    public void testRecovery() throws InterruptedException {
+
+        
+
+        test(EXECUTOR_URL + CRASH_T);
+
+        sleep(5000);
+
+        test(EXECUTOR_URL + RECOVERY_T);
     }
 
     private void test(final String url) {
