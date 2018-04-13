@@ -42,7 +42,7 @@
         <dependency>
             <groupId>org.apache.tomcat</groupId>
             <artifactId>tomcat-dbcp</artifactId>
-            <version>9.0.2-dev</version>
+            <version>9.0.7</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
